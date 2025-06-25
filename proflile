@@ -1,0 +1,58 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, count, when, isnan, length, avg
+from pyspark.sql.types import StringType
+
+#table_path_name from - ADLS
+def profile_table(table_path_or_name):
+    spark = SparkSession.builder.appName("DataProfiler").getOrCreate()
+
+    # Try loading as a table name first, then fallback to path (CSV or Parquet)
+    try:
+        df = spark.table(table_path_or_name)
+    except:
+        try:
+            df = spark.read.parquet(table_path_or_name)
+        except:
+            df = spark.read.option("header", "true").csv(table_path_or_name)
+
+    total_count = df.count()
+    results = []
+
+    for col_name, dtype in df.dtypes:
+        # Nulls (including NaN if any)
+        null_count = df.filter(col(col_name).isNull() | isnan(col(col_name))).count()
+        null_pct = (null_count / total_count) * 100 if total_count > 0 else 0
+
+        # Duplicates (per column)
+        dup_count = df.groupBy(col_name).count().filter("count > 1").count()
+        dup_pct = (dup_count / total_count) * 100 if total_count > 0 else 0
+
+        # Count total non-null values
+        non_null_count = df.filter(col(col_name).isNotNull()).count()
+
+        # Average length (only for string columns)
+        avg_len = "-"
+        if dtype == "string":
+            avg_len = df.select(avg(length(col(col_name)))).collect()[0][0]
+            avg_len = round(avg_len, 2) if avg_len else 0
+
+        results.append({
+            "Column": col_name,
+            "Data Type": dtype,
+            "Total Rows": total_count,
+            "Nulls": null_count,
+            "% Nulls": round(null_pct, 2),
+            "Duplicates": dup_count,
+            "% Duplicates": round(dup_pct, 2),
+            "Avg Data Length": avg_len
+        })
+
+    # Convert to a dataframe for easier viewing
+    profile_df = spark.createDataFrame(results)
+    profile_df.show(truncate=False)
+
+    return profile_df
+
+# Example usage
+# Replace with your actual path or table name
+profile_table("path/to/your/file.csv")
