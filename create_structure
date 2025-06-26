@@ -1,4 +1,43 @@
+%sql
 create catalog if not exists databricks_learning;
+%sql
 create schema if not exists Databricks_learning.Bronze;
+%sql
 create schema if not exists Databricks_learning.Silver;
+%sql
 create schema if not exists Databricks_learning.Gold;
+
+%python
+# Import necessary libraries
+import os
+import pandas as pd
+from pyspark.sql import SparkSession
+
+# Initialize Spark session
+spark = SparkSession.builder.appName("FileUploader").getOrCreate()
+
+# Define the file path and ADLS path
+file_path = "/dbfs/FileStore/tables/your_file"  # Change this to your file path- or local system
+adls_path = "abfss://<container>@<storage_account>.dfs.core.windows.net/<path>/your_file"  # Change this to your ADLS path
+
+
+def upload_file(file_path, adls_path):
+    file_extension = os.path.splitext(file_path)[1]
+    
+    if file_extension == ".json":
+        df = spark.read.json(file_path)
+    elif file_extension == ".csv":
+        df = spark.read.csv(file_path, header=True, inferSchema=True)
+    elif file_extension == ".xlsx":
+        df = pd.read_excel(file_path)
+        df = spark.createDataFrame(df)
+    elif file_extension == ".parquet":
+        df = spark.read.parquet(file_path)
+    else:
+        raise ValueError("Unsupported file format")
+    
+    # Write the DataFrame to ADLS
+    df.write.mode("overwrite").parquet(adls_path)
+
+# Call the function
+upload_file(file_path, adls_path)
