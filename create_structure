@@ -1,0 +1,4 @@
+create catalog if not exists databricks_learning;
+create schema if not exists Databricks_learning.Bronze;
+create schema if not exists Databricks_learning.Silver;
+create schema if not exists Databricks_learning.Gold;
